@@ -2,212 +2,232 @@
 <html lang="fr">
 <head>
     <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
     <title>Living Skylines</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/suncalc/1.9.0/suncalc.min.js"></script>
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&display=swap');
 
         :root {
-            /* Variables dynamiques */
             --overlay-color: rgba(0, 0, 0, 0);
             --base-filter: brightness(1);
             --light-opacity: 0;
-            /*--background-sky: #708193;*/
-            --sky-top: #204070;
-            --sky-mid: #4a7db3;
-            --sky-bottom: #a8c6e3;
-            --haze-opacity: 0.6;
-            --haze-color: rgba(255, 255, 255, 0.3);
-            --cloud-color: #ffffff;
+            --sky-top: #204070; --sky-mid: #4a7db3; --sky-bottom: #a8c6e3;
+            --haze-opacity: 0.6; --haze-color: rgba(255, 255, 255, 0.3);
+            --cloud-color: #ffffff; --cloud-opacity: 0.8; --cloud-filter: blur(25px);
             --snow-opacity: 0;
-            
-            /* --- NOUVEAU : VECTEURS DE VENT (X et Y) --- */
-            /* Par défaut, vers la droite */
-            --tx: 100vw; 
-            --ty: 0px;
-            --wind-duration: 60s; 
+            --tx: 100vw; --ty: 0px; --wind-duration: 60s; 
         }
 
-        body, html { 
-            margin: 0; padding: 0; 
-            width: 100%; height: 100%; 
-            overflow: hidden; 
-            font-family: 'Inter', sans-serif; 
-        }
+        body, html { margin: 0; padding: 0; width: 100%; height: 100%; overflow: hidden; font-family: 'Inter', sans-serif; background-color: #000;}
+        #scene { position: relative; width: 100vw; height: 100vh; overflow: hidden; }
 
-        #scene {
-            position: relative;
-            width: 100vw; height: 100vh;
-            overflow: hidden;
-            background-color: var(--background-sky);
-        }
-
+        /* --- CIEL --- */
         #background-sky {
-            position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+            position: absolute; top: 0; left: 0; width: 100%; height: 100%; z-index: 0;
             background-image: linear-gradient(to bottom, var(--sky-top) 0%, var(--sky-mid) 75%, var(--sky-bottom) 100%);
-            z-index: 0;
-             /* Subtle grain to break up banding */
-             filter: contrast(1.05) brightness(1.02);
-            /*  transition: background-color 2s linear;*/
+            filter: contrast(1.05) brightness(1.02);
         }
-        /* --- NEW LAYER FOR ATMOSPHERIC HAZE --- */
-        /* This creates the bright glow near the horizon */
         #sky-haze-layer {
-            position: absolute; top: 0; left: 0; width: 100%; height: 100%;
-            z-index: 0; /* Same z-index as background, sits on top due to DOM order */
-            /* A large radial gradient starting from bottom center */
+            position: absolute; top: 0; left: 0; width: 100%; height: 100%; z-index: 0; 
             background-image: radial-gradient(ellipse 150% 80% at 50% 100%, var(--haze-color) 0%, transparent 70%);
-            opacity: var(--haze-opacity);
-            mix-blend-mode: screen; /* Helps blend light over the background */
-            pointer-events: none;
+            opacity: var(--haze-opacity); mix-blend-mode: screen; pointer-events: none;
             transition: opacity 5s linear, background-color 5s linear;
         }
-        .shared-layer{
+
+        /* --- CALQUES VILLE (IMAGES DYNAMIQUES) --- */
+        /* Note: Les background-image sont gérés par le JS maintenant */
+        .shared-layer {
             position: absolute; top: 0; left: 0; width: 100%; height: 100%;
             background-size: auto 120%; background-repeat: no-repeat; background-position: center;
-            pointer-events: none;
-            transition: opacity 5s linear; /* Transition douce pour tout le monde */
+            pointer-events: none; transition: opacity 5s linear; 
         }
+
         #base-layer {
-            position: absolute; top: 0; left: 0; width: 100%; height: 100%;
-            background-image: url('city_base.png'); 
+            position: absolute; top: 0; left: 0; width: 100%; height: 100%; z-index: 1;
+            /* PAS D'IMAGE ICI */
             background-size: auto 120%; background-repeat: no-repeat; background-position: center;
-            z-index: 1;
-            filter: var(--base-filter);
-            transition: filter 5s linear;
+            filter: var(--base-filter); transition: filter 5s linear;
         }
-        /* --- DÉFINITION DES IMAGES --- */
+        #foreground-layer {
+            position: absolute; top: 0; left: 0; width: 100%; height: 100%; z-index: 3;
+             /* PAS D'IMAGE ICI */
+            background-size: auto 120%; background-repeat: no-repeat; background-position: center;
+            filter: var(--base-filter); transition: filter 5s linear; pointer-events: none;
+        }
+
         .snow { 
-            background-image: url('city_snow.png'); 
-            opacity: var(--snow-opacity, 0);
-            filter: var(--base-filter);
+            /* PAS D'IMAGE ICI */
+            opacity: var(--snow-opacity, 0); filter: var(--base-filter);
             transition: filter 5s linear, opacity 5s linear;
         }
         .light { 
-            background-image: url('lights.png'); 
-            opacity: var(--light-opacity, 0);
-            mix-blend-mode: normal; /* ou screen selon tes goûts */
+            /* PAS D'IMAGE ICI */
+            opacity: var(--light-opacity, 0); mix-blend-mode: normal; 
             filter: brightness(1) drop-shadow(0 0 5px rgba(250,200,80,0.5));
-        }
-        /* --- CSS NUAGES MIS À JOUR --- */
-        #cloud-layer {
-            position: absolute; top: 0; left: 0; width: 100%; height: 100%;
-            z-index: 2; pointer-events: none; overflow: hidden;
+            transition: opacity 5s linear;
         }
 
+        /* Z-INDEX */
+        #snow-layer-back, #light-layer-back { z-index: 1; }
+        #snow-layer-front, #light-layer-front { z-index: 4; }
+
+        /* MASQUES DYNAMIQUES */
+        .front-mask {
+            /* Les URLs des masques sont gérées par le JS */
+            -webkit-mask-size: auto 120%; mask-size: auto 120%;
+            -webkit-mask-repeat: no-repeat; mask-repeat: no-repeat;
+            -webkit-mask-position: center; mask-position: center;
+        }
+
+        /* --- ATMOSPHÈRE & FX --- */
+        #cloud-layer { position: absolute; top: 0; left: 0; width: 100%; height: 100%; z-index: 2; pointer-events: none; overflow: hidden; }
         .cloud {
-            position: absolute;
-            background: var(--cloud-color);
-            border-radius: 100px;
-            opacity: var(--cloud-opacity, 0.8);
-            filter: var(--cloud-filter, blur(25px));
-            
-            /* L'animation utilise les vecteurs calculés */
+            position: absolute; background: var(--cloud-color); border-radius: 100px;
+            opacity: var(--cloud-opacity, 0.8); filter: var(--cloud-filter, blur(25px));
             animation: moveCloud var(--wind-duration) linear infinite;
-            transition: background-color 5s, opacity 2s;
-            content-visibility: auto;
+            transition: background-color 5s, opacity 2s; content-visibility: auto;
         }
-
-        /* Formes nuages */
-        .cloud::after, .cloud::before {
-            content: ''; position: absolute; background: inherit; border-radius: 50%;
-        }
+        .cloud::after, .cloud::before { content: ''; position: absolute; background: inherit; border-radius: 50%; }
         .cloud::before { width: 50%; height: 150%; top: -60%; left: 15%; }
         .cloud::after { width: 40%; height: 120%; top: -50%; right: 15%; }
+        @keyframes moveCloud { from { transform: translate(calc(var(--tx) * -1), calc(var(--ty) * -1)); } to { transform: translate(var(--tx), var(--ty)); } }
 
-        /* --- NOUVELLE ANIMATION 360° --- */
-        /* On part de l'opposé du vecteur (-tx, -ty) vers le vecteur (tx, ty) */
-        /* Cela crée une traversée complète de l'écran passant par le centre */
-        @keyframes moveCloud {
-            from { 
-                transform: translate(calc(var(--tx) * -1), calc(var(--ty) * -1)); 
-            }
-            to { 
-                transform: translate(var(--tx), var(--ty)); 
-            }
-        }
-        #snow-layer-back { z-index: 1; }
-        #light-layer-back { z-index: 1; }
-        #snow-layer-front, #light-layer-front {
-            z-index: 4; 
-        }
-        .front-mask {
-            /* On utilise l'image des tours comme pochoir */
-            -webkit-mask-image: url('hauteur.png');
-            mask-image: url('hauteur.png');
-            
-            /* Le masque doit être aligné EXACTEMENT comme le background */
-            -webkit-mask-size: auto 120%;
-            mask-size: auto 120%;
-            
-            -webkit-mask-repeat: no-repeat;
-            mask-repeat: no-repeat;
-            
-            -webkit-mask-position: center;
-            mask-position: center;
-        }
-
-        #foreground-layer {
-            position: absolute; top: 0; left: 0; width: 100%; height: 100%;
-            background-image: url('hauteur.png'); 
-            background-size: auto 120%; background-repeat: no-repeat; background-position: center;
-            z-index: 3;
-            filter: var(--base-filter);
-            transition: filter 5s linear;
-            pointer-events: none;
-        }
-        #weather-canvas {
-            position: absolute; top: 0; left: 0; width: 100%; height: 100%;
-            z-index: 5; pointer-events: none;
-        }
-
+        #weather-canvas { position: absolute; top: 0; left: 0; width: 100%; height: 100%; z-index: 5; pointer-events: none; }
         #overlay-layer {
-            position: absolute; top: 0; left: 0; width: 100%; height: 100%;
-            background-color: var(--overlay-color);
-            z-index: 6; pointer-events: none; mix-blend-mode: multiply; 
+            position: absolute; top: 0; left: 0; width: 100%; height: 100%; z-index: 6;
+            background-color: var(--overlay-color); pointer-events: none; mix-blend-mode: multiply; 
             transition: background-color 5s linear;
         }
+
+        /* --- UI --- */
         .ui-container {
-            position: absolute; top: 15%; left: 50%; 
-            transform: translateX(-50%); z-index: 50;
-            text-align: center; color: #333;
-            background: rgba(255, 255, 255, 0.2); backdrop-filter: blur(15px);
-            padding: 1.5rem 3rem; border-radius: 2rem;
-            box-shadow: 0 10px 30px rgba(0,0,0,0.1);
-            transition: color 1s, background 1s;
-            user-select: none;
-            cursor: pointer;
+            position: absolute; top: 10%; left: 50%; transform: translateX(-50%); z-index: 50;
+            text-align: center; color: #333; background: rgba(255, 255, 255, 0.2); backdrop-filter: blur(15px);
+            padding: 1rem 1rem; border-radius: 1.5rem; box-shadow: 0 10px 30px rgba(0,0,0,0.1);
+            transition: color 1s, background 1s; user-select: none; cursor: pointer;
+        
+            max-width: 300px;
+            width: 50%;
         }
-        body.dark-ui .ui-container { color: white; background: rgba(255, 255, 255, 0.2); backdrop-filter: blur(15px); }
+        body.dark-ui .ui-container { color: white; background: rgba(255, 255, 255, 0.2); }
         h1 { margin: 0; font-size: 1rem; letter-spacing: 2px; text-transform: uppercase; opacity: 0.8; }
         .big-temp { font-size: 4rem; font-weight: 800; margin: 0; line-height: 1; }
         .status { font-size: 0.9rem; font-weight: 600; margin-top: 5px; opacity: 0.9; }
+        /*.nav-container { display: flex; align-items: center; justify-content: center; gap: 15px; }
+        .nav-arrow { font-size: 1.5rem; cursor: pointer; opacity: 0.6; transition: opacity 0.3s; padding: 0 10px;}
+        .nav-arrow:hover { opacity: 1; transform: scale(1.2); }*/
 
+        .search-container {
+            position: relative; /* Important pour que la liste se positionne par rapport à ça */
+            margin-bottom: 10px;
+            width: 100%;
+            display: flex;
+            justify-content: center; /* Centre l'input */
+            flex-direction: column;
+        }
+
+        #city-input {
+            background: transparent;
+            border: none;
+            color: #333; /* Ou white si dark-ui, géré plus bas */
+            font-family: 'Inter', sans-serif;
+            font-size: 2rem; /* Taille titre H1 */
+            font-weight: 800;
+            text-align: center;
+            width: 100%;
+            text-transform: uppercase;
+            letter-spacing: 2px;
+            outline: none; /* Pas de cadre bleu au clic */
+            cursor: text;
+            transition: color 1s;
+        }
+        /* Adaptation Dark Mode pour l'input */
+        body.dark-ui #city-input { color: white;}
+        #city-input::placeholder {
+            color: rgba(100, 100, 100, 0.5);
+            font-weight: 400;
+            font-size: 1.2rem;
+        }
+        body.dark-ui #city-input::placeholder {color: rgba(255, 255, 255, 0.5);}
+        .dropdown-list {
+            position: absolute;
+            top: 100%; /* Juste en dessous de l'input */
+            left: 50%;
+            transform: translateX(-50%); /* Parfaitement centré */
+            width: 250px; /* Largeur fixe pour faire propre */
+            
+            background: rgba(255, 255, 255, 0.9); /* Fond semi-transparent */
+            backdrop-filter: blur(15px);
+            border-radius: 15px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+            
+            max-height: 200px; /* Si trop de villes, on scrolle */
+            overflow-y: auto;
+            
+            display: none; /* Caché par défaut */
+            z-index: 100;
+            margin-top: 10px;
+            padding: 5px 0;
+        }
+        
+        /* Style Dark Mode pour la liste */
+        body.dark-ui .dropdown-list {
+            background: rgba(30, 30, 40, 0.9);
+            color: white;
+        }
+
+        /* Style des éléments de la liste */
+        .dropdown-item {
+            padding: 10px 20px;
+            font-size: 0.9rem;
+            font-weight: 600;
+            text-transform: uppercase;
+            cursor: pointer;
+            transition: background 0.2s;
+            text-align: left;
+        }
+        
+        .dropdown-item:hover {
+            background: rgba(0, 0, 0, 0.1);
+        }
+        body.dark-ui .dropdown-item:hover {
+            background: rgba(255, 255, 255, 0.1);
+        }
+
+        /* Barre de scroll jolie (Webkit) */
+        .dropdown-list::-webkit-scrollbar { width: 5px; }
+        .dropdown-list::-webkit-scrollbar-thumb { background: #ccc; border-radius: 5px; }
+        .dropdown-list::-webkit-scrollbar-track { background: transparent; }
+        
+        /* NOUVEAU STYLE : Message "Pas trouvé" */
+        .dropdown-message {
+            padding: 15px;
+            font-size: 0.85rem;
+            color: #666;
+            font-style: italic;
+            text-align: center;
+            cursor: default; /* Curseur normal, pas de main */
+            line-height: 1.4;
+        }
+        body.dark-ui .dropdown-message {
+            color: #bbb;
+        }
+
+        /* --- DEBUG --- */
         .debug-panel {
-            position: fixed; bottom: 20px; left: 20px; z-index: 100;
-            background: rgba(255, 255, 255, 0.2); backdrop-filter: blur(15px); padding: 15px;
-            border-radius: 10px; box-shadow: 0 4px 10px rgba(0,0,0,0.3);
-            font-family: sans-serif; font-size: 12px; width: 220px;
-            display: none;
+            position: fixed; bottom: 20px; left: 20px; z-index: 100; background: rgba(255, 255, 255, 0.8); backdrop-filter: blur(15px);
+            padding: 15px; border-radius: 10px; font-family: sans-serif; font-size: 12px; width: 220px; display: none;
         }
         .debug-panel button { cursor: pointer; padding: 5px; margin: 2px; border: 1px solid #ccc; background: #eee; border-radius: 4px; }
-        .debug-panel button:hover { background: #ddd; }
         .debug-panel input { width: 100%; margin: 5px 0; }
-        .debug-panel.visible{
-            display: block;
-            animation: fadeIn 0.3s ease;
-        }
-        @keyframes fadeIn{
-            from {opacity:0; transform: translateY(10px)}
-            to {opacity: 1; transform: translateY(0) ;}
-        }
+        .debug-panel.visible{ display: block; animation: fadeIn 0.3s ease; }
+        @keyframes fadeIn{ from {opacity:0; transform: translateY(10px)} to {opacity: 1; transform: translateY(0) ;} }
     </style>
 </head>
 <body>
-
     <div id="scene">
-        <div id="background-sky"></div>
-        <div id="sky-haze-layer"></div>
+        <div id="background-sky"></div><div id="sky-haze-layer"></div>
         <div id="base-layer"></div>
         <div id="snow-layer-back" class="shared-layer snow"></div>
         <div id="light-layer-back" class="shared-layer light"></div>
@@ -215,19 +235,21 @@
         <div id="foreground-layer"></div>
         <div id="snow-layer-front" class="shared-layer snow front-mask"></div>
         <div id="light-layer-front" class="shared-layer light front-mask"></div>
-        <canvas id="weather-canvas"></canvas>
-        <div id="overlay-layer"></div>
-        
+        <canvas id="weather-canvas"></canvas><div id="overlay-layer"></div>
 
         <div class="ui-container">
-            <h1 id="city-name">PARIS</h1>
+            <div class="search-container">
+                <input type="text" id="city-input" placeholder="CHOISIR UNE VILLE..." autocomplete="off">
+                
+                <div id="custom-dropdown" class="dropdown-list"></div>
+            </div>
+            
             <div class="big-temp" id="temp">--°</div>
             <div class="status">
                 <span id="icon">--</span>
-                <span id="condition">Chargement...</span>
+                <span id="condition">--</span>
             </div>
         </div>
-    </div>
 
     <div class="debug-panel">
         <strong>🕒 HEURE : <span id="debug-time">Réel</span></strong><br>
@@ -240,7 +262,7 @@
         <div style="display:flex; justify-content: space-between;">
             <button onclick="forceWeather(0)">☀️</button>
             <button onclick="forceWeather(3)">☁️</button>
-            <button onclick="forceWeather(45)" title="Brume / Brouillard">🌫️</button>
+            <button onclick="forceWeather(45)" title="Brume">🌫️</button>
             <button onclick="forceWeather(61)">🌧️</button>
             <button onclick="forceWeather(71)">❄️</button>
         </div>
@@ -256,461 +278,6 @@
         </div>
     </div>
 
-    <script>
-        const CONFIG = { lat: 48.8566, lon: 2.3522, city: "PARIS" };
-        let simulationOffset = null; 
-
-        function getSunPhase(date) {
-            if (typeof SunCalc === 'undefined') return 45; 
-            const pos = SunCalc.getPosition(date, CONFIG.lat, CONFIG.lon);
-            return pos.altitude * (180 / Math.PI); 
-        }
-        // 1. Outils mathématiques pour mélanger les couleurs
-        function lerp(start, end, t) { return start * (1 - t) + end * t; }
-        function lerpColor(c1, c2, t) {
-            return [
-                Math.round(lerp(c1[0], c2[0], t)),
-                Math.round(lerp(c1[1], c2[1], t)),
-                Math.round(lerp(c1[2], c2[2], t))
-            ];
-        }
-        function rgbStr(c) { return `rgb(${c[0]},${c[1]},${c[2]})`; }
-        function rgbaStr(c, a) { return `rgba(${c[0]},${c[1]},${c[2]}, ${a})`; }
-
-        // 2. La Palette Fluide (Définition des étapes clés)
-        // Angle: Altitude du soleil en degrés
-        // Sky: Couleurs du dégradé ciel (Top, Mid, Bottom)
-        // Haze: Couleur et opacité de la brume
-        // Light: Opacité des lumières de la ville (0 = éteint, 1 = allumé)
-        // Filter: Luminosité globale de la ville
-        const ATMOSPHERE_PALETTE = [
-            { // NUIT PROFONDE (-90° à -18°)
-                angle: -18,
-                skyTop: [2, 4, 8],      skyMid: [7, 11, 20],    skyBottom: [16, 24, 38],
-                hazeColor: [150, 180, 255], hazeOp: 0.3,
-                cloudColor: [31, 34, 43], // Gris très sombre
-                lightOp: 1.0,           baseBright: 0.5,        uiDark: true
-            },
-            { // CRÉPUSCULE NAUTIQUE (-6°)
-                angle: -6,
-                skyTop: [22, 30, 60],   skyMid: [46, 59, 100],  skyBottom: [138, 79, 82],
-                hazeColor: [150, 50, 50],   hazeOp: 0.5,
-                cloudColor: [80, 90, 117], // Bleu gris
-                lightOp: 0.8,           baseBright: 0.7,        uiDark: true
-            },
-            { // LEVER/COUCHER (0°) - L'instant critique
-                angle: 0,
-                skyTop: [44, 62, 117],  skyMid: [196, 108, 77], skyBottom: [255, 179, 71],
-                hazeColor: [255, 200, 100], hazeOp: 0.8,
-                cloudColor: [255, 232, 201], // Rose/Orange nuages
-                lightOp: 0.4,           baseBright: 0.8,        uiDark: false
-            },
-            { // GOLDEN HOUR (6°)
-                angle: 6,
-                skyTop: [40, 70, 130],  skyMid: [100, 150, 200], skyBottom: [220, 190, 150],
-                hazeColor: [255, 240, 200], hazeOp: 0.6,
-                cloudColor: [255, 250, 240], // Blanc cassé
-                lightOp: 0.0,           baseBright: 1.0,        uiDark: false
-            },
-            { // PLEIN JOUR (15° et plus)
-                angle: 20,
-                skyTop: [26, 75, 140],  skyMid: [74, 138, 212], skyBottom: [159, 200, 232],
-                hazeColor: [255, 255, 230], hazeOp: 0.5,
-                cloudColor: [255, 255, 255], // Blanc pur
-                lightOp: 0.0,           baseBright: 1.05,       uiDark: false
-            }
-        ];
-        function updateAtmosphere() {
-            let now = new Date();
-            // Gestion du slider de temps (inchangé)
-            if (simulationOffset !== null) {
-                now = new Date(); now.setHours(0, 0, 0, 0);
-                const hours = Math.floor(simulationOffset);
-                const minutes = (simulationOffset - hours) * 60;
-                now.setHours(hours, minutes);
-            }
-            
-            // 1. Calcul de l'altitude solaire
-            let sunAlt = getSunPhase(now);
-            
-            // Bornes pour éviter de sortir du tableau
-            if (sunAlt < -18) sunAlt = -18;
-            if (sunAlt > 20) sunAlt = 20;
-
-            // 2. Trouver les deux étapes de la palette (Start & End)
-            let startStep = ATMOSPHERE_PALETTE[0];
-            let endStep = ATMOSPHERE_PALETTE[ATMOSPHERE_PALETTE.length - 1];
-
-            for (let i = 0; i < ATMOSPHERE_PALETTE.length - 1; i++) {
-                if (sunAlt >= ATMOSPHERE_PALETTE[i].angle && sunAlt <= ATMOSPHERE_PALETTE[i+1].angle) {
-                    startStep = ATMOSPHERE_PALETTE[i];
-                    endStep = ATMOSPHERE_PALETTE[i+1];
-                    break;
-                }
-            }
-
-            // 3. Calculer le facteur de progression (0.0 à 1.0) entre ces deux étapes
-            const range = endStep.angle - startStep.angle;
-            const progress = (sunAlt - startStep.angle) / range; // 0 = début étape, 1 = fin étape
-
-            // 4. Interpolation et Application des couleurs
-            const root = document.documentElement;
-
-            // Ciel
-            root.style.setProperty('--sky-top', rgbStr(lerpColor(startStep.skyTop, endStep.skyTop, progress)));
-            root.style.setProperty('--sky-mid', rgbStr(lerpColor(startStep.skyMid, endStep.skyMid, progress)));
-            root.style.setProperty('--sky-bottom', rgbStr(lerpColor(startStep.skyBottom, endStep.skyBottom, progress)));
-
-            // Brume
-            const currentHazeColor = lerpColor(startStep.hazeColor, endStep.hazeColor, progress);
-            const currentHazeOp = lerp(startStep.hazeOp, endStep.hazeOp, progress);
-            root.style.setProperty('--haze-color', rgbaStr(currentHazeColor, 0.5)); // Alpha fixe ou variable selon besoin
-            root.style.setProperty('--haze-opacity', currentHazeOp);
-
-            // Nuages & Lumières
-            root.style.setProperty('--cloud-color', rgbStr(lerpColor(startStep.cloudColor, endStep.cloudColor, progress)));
-            root.style.setProperty('--light-opacity', lerp(startStep.lightOp, endStep.lightOp, progress));
-
-            // Filtre de luminosité sur la ville
-            const brightness = lerp(startStep.baseBright, endStep.baseBright, progress);
-            // On garde un peu de contraste et de saturation dynamiques si on veut, sinon simple brightness
-            root.style.setProperty('--base-filter', `brightness(${brightness}) contrast(1.1)`);
-
-            // Gestion UI (On bascule simplement à mi-chemin)
-            if (endStep.uiDark && progress > 0.5 || startStep.uiDark && progress < 0.5) {
-                document.body.classList.add('dark-ui');
-            } else {
-                document.body.classList.remove('dark-ui');
-            }
-
-            // Mise à jour texte Debug
-            if(simulationOffset !== null) {
-                const h = now.getHours().toString().padStart(2,'0');
-                const m = Math.floor(now.getMinutes()).toString().padStart(2,'0');
-                document.getElementById('debug-time').innerText = `${h}:${m} (Alt: ${sunAlt.toFixed(1)}°)`;
-            }
-        }
-
-        // ================= 2. NUAGES 360° & VENT =================
-        const cloudLayer = document.getElementById('cloud-layer');
-        let currentCloudCount = 0;
-
-        function updateWind(speedKmH, directionDeg) {
-            // 1. Calcul de la Durée (Vitesse)
-            let duration = 100 - speedKmH; 
-            if (duration < 20) duration = 20; 
-
-            // 2. Calcul des Vecteurs (Direction 360°)
-            // L'API donne la direction d'où vient le vent (0=Nord, 90=Est).
-            // Le mouvement va vers l'opposé (+180°).
-            // En CSS/Canvas : Y est inversé (bas = positif), et 0° trigonométrique est à droite.
-            // On simplifie :
-            // Si Dir=270 (Ouest) -> va vers l'Est (Droite, +X)
-            // Si Dir=0 (Nord) -> va vers le Sud (Bas, +Y)
-            
-            // On convertit en radians pour Math.sin/cos
-            // On ajoute 180 car le vent "pousse" vers l'opposé
-            const angleRad = (directionDeg - 180) * (Math.PI / 180);
-            
-            // Distance arbitraire suffisante pour sortir de l'écran (ex: 150vmax)
-            // On utilise des unités relatives pour le CSS
-            const dist = 150; 
-            
-            // Calcul : X = Sin(angle) * dist, Y = Cos(angle) * dist
-            // Note : Math.sin/cos fonctionnent bien si on aligne le cercle.
-            // Pour être sûr : 
-            // 0deg (Nord) -> Doit donner Y positif (Descend). Cos(0)=1. Donc Y = -Cos(angle+180) ?
-            // Faisons simple : 
-            // On veut le vecteur de DESTINATION.
-            // Vent venant de (directionDeg). Il va vers (directionDeg + 180).
-            const destAngleRad = (directionDeg + 180) * (Math.PI / 180);
-
-            // En "coordonnées écran" (0° est en haut en météo, mais à droite en Math)
-            // X = sin(angleMeteo), Y = -cos(angleMeteo) car Y est inversé en CSS ?
-            // Testons : 
-            // Vent 270 (Ouest) -> Va vers 90 (Est). X doit être positif. Sin(90)=1. OK.
-            // Vent 0 (Nord) -> Va vers 180 (Sud). Y doit être positif. -Cos(180) = -(-1) = 1. OK.
-            
-            const tx = Math.sin(destAngleRad) * dist;
-            const ty = -Math.cos(destAngleRad) * dist;
-
-            cloudLayer.style.setProperty('--wind-duration', `${duration}s`);
-            cloudLayer.style.setProperty('--tx', `${tx}vmax`); // vmin/vmax couvre l'écran
-            cloudLayer.style.setProperty('--ty', `${ty}vmax`);
-        }
-
-        function createComplexCloud() {
-            const cloud = document.createElement('div');
-            cloud.classList.add('cloud');
-            
-            // --- AJOUT POUR TRANSITION D'ENTRÉE ---
-            // 1. On le crée totalement transparent
-            cloud.style.opacity = '0'; 
-            // --------------------------------------
-
-            const width = Math.floor(Math.random() * 750) + 150; 
-            const height = Math.floor(width * (0.3 + Math.random() * 0.2)); 
-            
-            cloud.style.width = `${width}px`;
-            cloud.style.height = `${height}px`;
-            
-            cloud.style.top = `${Math.random() * 160-30}%`;
-            cloud.style.left = `${Math.random() * 160-30}%`;
-            cloud.style.animationDelay = `-${Math.random() * 100}s`;
-            
-            const blur = 20 + Math.random() * 40;
-            cloud.style.filter = `blur(${blur}px)`;
-            
-            cloudLayer.appendChild(cloud);
-
-            // --- AJOUT POUR TRANSITION D'ENTRÉE ---
-            // 2. Juste après l'avoir ajouté, on nettoie le style inline.
-            // Cela rend la main au CSS (var --cloud-opacity) et lance la transition.
-            setTimeout(() => {
-                cloud.style.opacity = '';
-            }, 10);
-            // --------------------------------------
-        }
-
-        function manageCloudPopulation(targetCount) {
-            if (currentCloudCount === targetCount) return;
-
-            // CAS 1 : IL FAUT AJOUTER DES NUAGES
-            if (currentCloudCount < targetCount) {
-                while (currentCloudCount < targetCount) {
-                    createComplexCloud();
-                    currentCloudCount++;
-                }
-            } 
-            // CAS 2 : IL FAUT ENLEVER DES NUAGES (Transition douce)
-            else if (currentCloudCount > targetCount) {
-                // On récupère tous les nuages ACTIFS (ceux qui n'ont pas la classe 'dying')
-                // Cela évite de sélectionner ceux qui sont déjà en train de disparaître
-                const clouds = document.querySelectorAll('.cloud:not(.dying)');
-                
-                while (currentCloudCount > targetCount) {
-                    // On prend le dernier de la liste
-                    const cloudToRemove = clouds[currentCloudCount - 1];
-                    
-                    if (cloudToRemove) {
-                        // 1. On lui ajoute une classe pour dire "toi, tu meurs bientôt"
-                        cloudToRemove.classList.add('dying');
-                        
-                        // 2. On force l'opacité à 0 pour déclencher le fondu de sortie
-                        cloudToRemove.style.opacity = '0';
-                        
-                        // 3. On attend 2 secondes (ta durée de transition CSS) avant de le supprimer du DOM
-                        setTimeout(() => {
-                            cloudToRemove.remove();
-                        }, 2000);
-                    }
-                    currentCloudCount--;
-                }
-            }
-        }
-
-        // ================= 3. PLUIE & NEIGE =================
-        const canvas = document.getElementById('weather-canvas');
-        const ctx = canvas.getContext('2d');
-        let w, h;
-        let particles = [];
-        let animationId = null;
-
-        function resize(){ w=canvas.width=window.innerWidth; h=canvas.height=window.innerHeight; }
-        window.onresize=resize; resize();
-
-        class Particle {
-            constructor(type) { this.type = type; this.reset(); }
-            reset() {
-                this.x = Math.random() * w;
-                this.y = Math.random() * -h; 
-                if (this.type === 'rain') {
-                    this.vy = Math.random() * 10 + 10; this.vx = Math.random() * 1 - 0.5; this.len = Math.random() * 20 + 10;
-                } else if (this.type === 'snow') {
-                    this.vy = Math.random() * 2 + 1; this.vx = Math.random() * 2 - 1; this.size = Math.random() * 3 + 1;
-                }
-            }
-            update() {
-                this.y += this.vy; this.x += this.vx; if (this.y > h) this.reset();
-            }
-            draw() {
-                if (this.type === 'rain') {
-                    ctx.beginPath(); ctx.strokeStyle = 'rgba(174, 194, 224, 0.5)'; ctx.lineWidth = 1;
-                    ctx.moveTo(this.x, this.y); ctx.lineTo(this.x + this.vx, this.y + this.len); ctx.stroke();
-                } else if (this.type === 'snow') {
-                    ctx.beginPath(); ctx.fillStyle = 'rgba(255, 255, 255, 0.8)';
-                    ctx.arc(this.x, this.y, this.size, 0, Math.PI * 2); ctx.fill();
-                }
-            }
-        }
-
-        function startPrecipitation(type) {
-            if (animationId) cancelAnimationFrame(animationId);
-            particles = [];
-            const count = (type === 'rain') ? 500 : 200; 
-            for(let i=0; i<count; i++) particles.push(new Particle(type));
-            function loop() {
-                ctx.clearRect(0, 0, w, h); particles.forEach(p => { p.update(); p.draw(); });
-                animationId = requestAnimationFrame(loop);
-            }
-            loop();
-        }
-        function stopPrecipitation() {
-            if (animationId) cancelAnimationFrame(animationId);
-            ctx.clearRect(0, 0, w, h);
-        }
-
-        // ================= 4. DATA CONTROLLER =================
-        let isWeatherDebug = false; 
-        let debugWindSpeed = 10;    
-        let debugWindDir = 270; 
-
-        function applyWeatherData(data) {
-            document.getElementById('temp').innerText = Math.round(data.temperature_2m) + "°";
-            document.getElementById('icon').innerText = getIcon(data.weather_code, data.is_day);
-            document.getElementById('condition').innerText = getDesc(data.weather_code);
-
-            const windS = isWeatherDebug ? debugWindSpeed : data.wind_speed_10m;
-            const windD = isWeatherDebug ? debugWindDir : data.wind_direction_10m;
-            
-            updateDebugDisplay(windS, windD);
-            updateWind(windS, windD);
-            manageCloudPopulation(getCloudCountFromCode(data.weather_code));
-            const root = document.documentElement;
-            if ([45, 48].includes(data.weather_code)) {
-                // On rend les nuages très flous et plus transparents
-                root.style.setProperty('--cloud-filter', 'blur(25px)'); 
-                root.style.setProperty('--cloud-opacity', '0.4');
-            } else {
-                // Retour à la normale
-                root.style.setProperty('--cloud-filter', 'blur(5px)');
-                root.style.setProperty('--cloud-opacity', '0.6');
-            }
-            const code = data.weather_code;
-            stopPrecipitation();
-            if ([51,53,55,61,63,65,80,81,82].includes(code)) startPrecipitation('rain');
-            else if ([71,73,75,77,85,86].includes(code)) startPrecipitation('snow');
-            
-            const snowCodes = [71, 73, 75, 85, 86];
-            if (snowCodes.includes(code)) {
-                root.style.setProperty('--snow-opacity', '1');
-            } else  {root.style.setProperty('--snow-opacity', '0')}
-        }
-
-        async function updateGlobalWeather() {
-            if (isWeatherDebug) return;
-            try {
-                const res = await fetch(`https://api.open-meteo.com/v1/forecast?latitude=${CONFIG.lat}&longitude=${CONFIG.lon}&current=temperature_2m,is_day,weather_code,wind_speed_10m,wind_direction_10m&timezone=auto`);
-                const data = await res.json();
-                applyWeatherData(data.current);
-            } catch (e) { console.error("Erreur Météo:", e); }
-        }
-
-        // --- DEBUG & UTILS ---
-        function forceWeather(code) {
-            isWeatherDebug = true;
-            applyWeatherData({ temperature_2m: 15, is_day: 1, weather_code: code, wind_speed_10m: debugWindSpeed, wind_direction_10m: debugWindDir });
-        }
-        function forceWindSpeed(val) { debugWindSpeed = parseFloat(val); if (isWeatherDebug) refreshWindOnly(); }
-        function forceWindDir(val) { debugWindDir = parseFloat(val); if (isWeatherDebug) refreshWindOnly(); }
-        function refreshWindOnly() { updateDebugDisplay(debugWindSpeed, debugWindDir); updateWind(debugWindSpeed, debugWindDir); }
-        
-        function updateDebugDisplay(speed, dir) {
-            document.getElementById('debug-wind-val').innerText = Math.round(speed);
-            const directions = ['N', 'NE', 'E', 'SE', 'S', 'SO', 'O', 'NO'];
-            const index = Math.round(dir / 45) % 8;
-            document.getElementById('debug-wind-dir-val').innerText = `${directions[index]} (${Math.round(dir)}°)`;
-            if(!isWeatherDebug) {
-                document.getElementById('wind-slider').value = speed;
-                document.getElementById('wind-dir-slider').value = dir;
-            }
-        }
-        function resetWeatherDebug() { isWeatherDebug = false; document.getElementById('debug-wind-val').innerText = "Auto"; document.getElementById('debug-wind-dir-val').innerText = "Auto"; updateGlobalWeather(); }
-
-        function getCloudCountFromCode(code) {
-            // 0 = Ciel Clair
-            if (code === 0) return 0;
-            
-            // 1 = Principalement clair (quelques nuages)
-            if (code === 1) return 4;
-            
-            // 2 = Partiellement nuageux
-            if (code === 2) return 20;
-            
-            // 3 = Couvert (Overcast) -> Beaucoup de nuages pour cacher le ciel
-            if (code === 3) return 40;
-
-            // 45, 48 = Brouillard / Brume -> DENSITÉ MAXIMALE
-            if ([45, 48].includes(code)) return 150; 
-            
-            // Pluie / Neige / Orages -> Très couvert
-            if (code >= 51) return 100;
-            
-            return 5; // Valeur par défaut
-        }
-        function getIcon(code, isDay) { if([0,1].includes(code))return isDay?'☀️':'🌙'; if([2,3,45,48].includes(code))return '☁️'; if(code>=51&&code<=67)return '🌧️'; if(code>=71)return '❄️'; return '🌡️'; }
-        function getDesc(code) {
-            // --- CIEL & NUAGES ---
-            if (code === 0) return "Ensoleillé";
-            if (code === 1) return "Quelques nuages";
-            if (code === 2) return "Partiellement nuageux";
-            if (code === 3) return "Couvert";
-
-            // --- BROUILLARD ---
-            if (code === 45) return "Brouillard";
-            if (code === 48) return "Brouillard givrant";
-
-            // --- BRUINE (Pluie très fine) ---
-            if (code === 51) return "Bruine légère";
-            if (code === 53) return "Bruine modérée";
-            if (code === 55) return "Bruine dense";
-            if (code === 56 || code === 57) return "Bruine verglaçante";
-
-            // --- PLUIE ---
-            if (code === 61) return "Pluie faible";
-            if (code === 63) return "Pluie modérée";
-            if (code === 65) return "Pluie forte";
-            
-            // --- PLUIE VERGLAÇANTE ---
-            if (code === 66 || code === 67) return "Pluie verglaçante";
-
-            // --- NEIGE ---
-            if (code === 71) return "Neige faible";
-            if (code === 73) return "Neige modérée";
-            if (code === 75) return "Forte neige";
-            if (code === 77) return "Grésil";
-
-            // --- AVERSES (Pluie courte mais intense) ---
-            if (code === 80) return "Averses faibles";
-            if (code === 81) return "Averses modérées";
-            if (code === 82) return "Averses violentes";
-
-            // --- AVERSES DE NEIGE ---
-            if (code === 85 || code === 86) return "Averses de neige";
-
-            // --- ORAGES ---
-            if (code === 95) return "Orage";
-            if (code === 96 || code === 99) return "Orage & Grêle";
-
-            return "Indéterminé";
-        }
-        const slider = document.getElementById('time-slider');
-        slider.addEventListener('input', (e) => { simulationOffset = parseFloat(e.target.value); updateAtmosphere(); });
-        function resetTime() { simulationOffset = null; document.getElementById('debug-time').innerText = "Temps Réel"; updateAtmosphere(); }
-
-        updateAtmosphere(); setInterval(updateAtmosphere, 60000); 
-        updateGlobalWeather(); setInterval(updateGlobalWeather, 600000); 
-        const uiBox =document.querySelector('.ui-container');
-        const debugBox=document.querySelector('.debug-panel');
-        uiBox.addEventListener('dblclick', () =>{
-            debugBox.classList.toggle('visible');
-        });
-        document.getElementById('scene').addEventListener('click', (e) => {
-            if (e.target.id === 'background-sky' || e.target.id === 'scene') {
-                debugBox.classList.remove('visible');
-            }
-        });
-    </script>
+    <script src="script.js"></script>
 </body>
-
 </html>
