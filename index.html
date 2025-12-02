@@ -1,0 +1,283 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>Living Skylines</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/suncalc/1.9.0/suncalc.min.js"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&display=swap');
+
+        :root {
+            --overlay-color: rgba(0, 0, 0, 0);
+            --base-filter: brightness(1);
+            --light-opacity: 0;
+            --sky-top: #204070; --sky-mid: #4a7db3; --sky-bottom: #a8c6e3;
+            --haze-opacity: 0.6; --haze-color: rgba(255, 255, 255, 0.3);
+            --cloud-color: #ffffff; --cloud-opacity: 0.8; --cloud-filter: blur(25px);
+            --snow-opacity: 0;
+            --tx: 100vw; --ty: 0px; --wind-duration: 60s; 
+        }
+
+        body, html { margin: 0; padding: 0; width: 100%; height: 100%; overflow: hidden; font-family: 'Inter', sans-serif; background-color: #000;}
+        #scene { position: relative; width: 100vw; height: 100vh; overflow: hidden; }
+
+        /* --- CIEL --- */
+        #background-sky {
+            position: absolute; top: 0; left: 0; width: 100%; height: 100%; z-index: 0;
+            background-image: linear-gradient(to bottom, var(--sky-top) 0%, var(--sky-mid) 75%, var(--sky-bottom) 100%);
+            filter: contrast(1.05) brightness(1.02);
+        }
+        #sky-haze-layer {
+            position: absolute; top: 0; left: 0; width: 100%; height: 100%; z-index: 0; 
+            background-image: radial-gradient(ellipse 150% 80% at 50% 100%, var(--haze-color) 0%, transparent 70%);
+            opacity: var(--haze-opacity); mix-blend-mode: screen; pointer-events: none;
+            transition: opacity 5s linear, background-color 5s linear;
+        }
+
+        /* --- CALQUES VILLE (IMAGES DYNAMIQUES) --- */
+        /* Note: Les background-image sont gérés par le JS maintenant */
+        .shared-layer {
+            position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+            background-size: auto 120%; background-repeat: no-repeat; background-position: center;
+            pointer-events: none; transition: opacity 5s linear; 
+        }
+
+        #base-layer {
+            position: absolute; top: 0; left: 0; width: 100%; height: 100%; z-index: 1;
+            /* PAS D'IMAGE ICI */
+            background-size: auto 120%; background-repeat: no-repeat; background-position: center;
+            filter: var(--base-filter); transition: filter 5s linear;
+        }
+        #foreground-layer {
+            position: absolute; top: 0; left: 0; width: 100%; height: 100%; z-index: 3;
+             /* PAS D'IMAGE ICI */
+            background-size: auto 120%; background-repeat: no-repeat; background-position: center;
+            filter: var(--base-filter); transition: filter 5s linear; pointer-events: none;
+        }
+
+        .snow { 
+            /* PAS D'IMAGE ICI */
+            opacity: var(--snow-opacity, 0); filter: var(--base-filter);
+            transition: filter 5s linear, opacity 5s linear;
+        }
+        .light { 
+            /* PAS D'IMAGE ICI */
+            opacity: var(--light-opacity, 0); mix-blend-mode: normal; 
+            filter: brightness(1) drop-shadow(0 0 5px rgba(250,200,80,0.5));
+            transition: opacity 5s linear;
+        }
+
+        /* Z-INDEX */
+        #snow-layer-back, #light-layer-back { z-index: 1; }
+        #snow-layer-front, #light-layer-front { z-index: 4; }
+
+        /* MASQUES DYNAMIQUES */
+        .front-mask {
+            /* Les URLs des masques sont gérées par le JS */
+            -webkit-mask-size: auto 120%; mask-size: auto 120%;
+            -webkit-mask-repeat: no-repeat; mask-repeat: no-repeat;
+            -webkit-mask-position: center; mask-position: center;
+        }
+
+        /* --- ATMOSPHÈRE & FX --- */
+        #cloud-layer { position: absolute; top: 0; left: 0; width: 100%; height: 100%; z-index: 2; pointer-events: none; overflow: hidden; }
+        .cloud {
+            position: absolute; background: var(--cloud-color); border-radius: 100px;
+            opacity: var(--cloud-opacity, 0.8); filter: var(--cloud-filter, blur(25px));
+            animation: moveCloud var(--wind-duration) linear infinite;
+            transition: background-color 5s, opacity 2s; content-visibility: auto;
+        }
+        .cloud::after, .cloud::before { content: ''; position: absolute; background: inherit; border-radius: 50%; }
+        .cloud::before { width: 50%; height: 150%; top: -60%; left: 15%; }
+        .cloud::after { width: 40%; height: 120%; top: -50%; right: 15%; }
+        @keyframes moveCloud { from { transform: translate(calc(var(--tx) * -1), calc(var(--ty) * -1)); } to { transform: translate(var(--tx), var(--ty)); } }
+
+        #weather-canvas { position: absolute; top: 0; left: 0; width: 100%; height: 100%; z-index: 5; pointer-events: none; }
+        #overlay-layer {
+            position: absolute; top: 0; left: 0; width: 100%; height: 100%; z-index: 6;
+            background-color: var(--overlay-color); pointer-events: none; mix-blend-mode: multiply; 
+            transition: background-color 5s linear;
+        }
+
+        /* --- UI --- */
+        .ui-container {
+            position: absolute; top: 10%; left: 50%; transform: translateX(-50%); z-index: 50;
+            text-align: center; color: #333; background: rgba(255, 255, 255, 0.2); backdrop-filter: blur(15px);
+            padding: 1rem 1rem; border-radius: 1.5rem; box-shadow: 0 10px 30px rgba(0,0,0,0.1);
+            transition: color 1s, background 1s; user-select: none; cursor: pointer;
+        
+            max-width: 300px;
+            width: 50%;
+        }
+        body.dark-ui .ui-container { color: white; background: rgba(255, 255, 255, 0.2); }
+        h1 { margin: 0; font-size: 1rem; letter-spacing: 2px; text-transform: uppercase; opacity: 0.8; }
+        .big-temp { font-size: 4rem; font-weight: 800; margin: 0; line-height: 1; }
+        .status { font-size: 0.9rem; font-weight: 600; margin-top: 5px; opacity: 0.9; }
+        /*.nav-container { display: flex; align-items: center; justify-content: center; gap: 15px; }
+        .nav-arrow { font-size: 1.5rem; cursor: pointer; opacity: 0.6; transition: opacity 0.3s; padding: 0 10px;}
+        .nav-arrow:hover { opacity: 1; transform: scale(1.2); }*/
+
+        .search-container {
+            position: relative; /* Important pour que la liste se positionne par rapport à ça */
+            margin-bottom: 10px;
+            width: 100%;
+            display: flex;
+            justify-content: center; /* Centre l'input */
+            flex-direction: column;
+        }
+
+        #city-input {
+            background: transparent;
+            border: none;
+            color: #333; /* Ou white si dark-ui, géré plus bas */
+            font-family: 'Inter', sans-serif;
+            font-size: 2rem; /* Taille titre H1 */
+            font-weight: 800;
+            text-align: center;
+            width: 100%;
+            text-transform: uppercase;
+            letter-spacing: 2px;
+            outline: none; /* Pas de cadre bleu au clic */
+            cursor: text;
+            transition: color 1s;
+        }
+        /* Adaptation Dark Mode pour l'input */
+        body.dark-ui #city-input { color: white;}
+        #city-input::placeholder {
+            color: rgba(100, 100, 100, 0.5);
+            font-weight: 400;
+            font-size: 1.2rem;
+        }
+        body.dark-ui #city-input::placeholder {color: rgba(255, 255, 255, 0.5);}
+        .dropdown-list {
+            position: absolute;
+            top: 100%; /* Juste en dessous de l'input */
+            left: 50%;
+            transform: translateX(-50%); /* Parfaitement centré */
+            width: 250px; /* Largeur fixe pour faire propre */
+            
+            background: rgba(255, 255, 255, 0.9); /* Fond semi-transparent */
+            backdrop-filter: blur(15px);
+            border-radius: 15px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+            
+            max-height: 200px; /* Si trop de villes, on scrolle */
+            overflow-y: auto;
+            
+            display: none; /* Caché par défaut */
+            z-index: 100;
+            margin-top: 10px;
+            padding: 5px 0;
+        }
+        
+        /* Style Dark Mode pour la liste */
+        body.dark-ui .dropdown-list {
+            background: rgba(30, 30, 40, 0.9);
+            color: white;
+        }
+
+        /* Style des éléments de la liste */
+        .dropdown-item {
+            padding: 10px 20px;
+            font-size: 0.9rem;
+            font-weight: 600;
+            text-transform: uppercase;
+            cursor: pointer;
+            transition: background 0.2s;
+            text-align: left;
+        }
+        
+        .dropdown-item:hover {
+            background: rgba(0, 0, 0, 0.1);
+        }
+        body.dark-ui .dropdown-item:hover {
+            background: rgba(255, 255, 255, 0.1);
+        }
+
+        /* Barre de scroll jolie (Webkit) */
+        .dropdown-list::-webkit-scrollbar { width: 5px; }
+        .dropdown-list::-webkit-scrollbar-thumb { background: #ccc; border-radius: 5px; }
+        .dropdown-list::-webkit-scrollbar-track { background: transparent; }
+        
+        /* NOUVEAU STYLE : Message "Pas trouvé" */
+        .dropdown-message {
+            padding: 15px;
+            font-size: 0.85rem;
+            color: #666;
+            font-style: italic;
+            text-align: center;
+            cursor: default; /* Curseur normal, pas de main */
+            line-height: 1.4;
+        }
+        body.dark-ui .dropdown-message {
+            color: #bbb;
+        }
+
+        /* --- DEBUG --- */
+        .debug-panel {
+            position: fixed; bottom: 20px; left: 20px; z-index: 100; background: rgba(255, 255, 255, 0.8); backdrop-filter: blur(15px);
+            padding: 15px; border-radius: 10px; font-family: sans-serif; font-size: 12px; width: 220px; display: none;
+        }
+        .debug-panel button { cursor: pointer; padding: 5px; margin: 2px; border: 1px solid #ccc; background: #eee; border-radius: 4px; }
+        .debug-panel input { width: 100%; margin: 5px 0; }
+        .debug-panel.visible{ display: block; animation: fadeIn 0.3s ease; }
+        @keyframes fadeIn{ from {opacity:0; transform: translateY(10px)} to {opacity: 1; transform: translateY(0) ;} }
+    </style>
+</head>
+<body>
+    <div id="scene">
+        <div id="background-sky"></div><div id="sky-haze-layer"></div>
+        <div id="base-layer"></div>
+        <div id="snow-layer-back" class="shared-layer snow"></div>
+        <div id="light-layer-back" class="shared-layer light"></div>
+        <div id="cloud-layer"></div>
+        <div id="foreground-layer"></div>
+        <div id="snow-layer-front" class="shared-layer snow front-mask"></div>
+        <div id="light-layer-front" class="shared-layer light front-mask"></div>
+        <canvas id="weather-canvas"></canvas><div id="overlay-layer"></div>
+
+        <div class="ui-container">
+            <div class="search-container">
+                <input type="text" id="city-input" placeholder="CHOISIR UNE VILLE..." autocomplete="off">
+                
+                <div id="custom-dropdown" class="dropdown-list"></div>
+            </div>
+            
+            <div class="big-temp" id="temp">--°</div>
+            <div class="status">
+                <span id="icon">--</span>
+                <span id="condition">--</span>
+            </div>
+        </div>
+
+    <div class="debug-panel">
+        <strong>🕒 HEURE : <span id="debug-time">Réel</span></strong><br>
+        <input type="range" id="time-slider" min="0" max="24" step="0.1">
+        <button onclick="resetTime()">Reset Heure</button>
+        
+        <hr style="margin: 10px 0; border: 0; border-top: 1px solid #ccc;">
+
+        <strong>⛈️ MÉTÉO FORCE :</strong><br>
+        <div style="display:flex; justify-content: space-between;">
+            <button onclick="forceWeather(0)">☀️</button>
+            <button onclick="forceWeather(3)">☁️</button>
+            <button onclick="forceWeather(45)" title="Brume">🌫️</button>
+            <button onclick="forceWeather(61)">🌧️</button>
+            <button onclick="forceWeather(71)">❄️</button>
+        </div>
+
+        <strong>💨 VITESSE : <span id="debug-wind-val">10</span> km/h</strong><br>
+        <input type="range" id="wind-slider" min="0" max="120" value="10" oninput="forceWindSpeed(this.value)">
+
+        <strong style="display:block; margin-top:5px;">🧭 DIRECTION : <span id="debug-wind-dir-val">Ouest</span></strong>
+        <input type="range" id="wind-dir-slider" min="0" max="360" value="270" oninput="forceWindDir(this.value)">
+        
+        <div style="margin-top:10px;">
+            <button onclick="resetWeatherDebug()" style="width:100%; font-weight:bold; color:blue; border: 1px solid blue; background: #eef;">RETOUR LIVE API</button>
+        </div>
+    </div>
+
+    <script src="script.js"></script>
+</body>
+</html>
