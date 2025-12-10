@@ -1,0 +1,29 @@
+{
+    "citySelector": {
+        "type": "dropdown",
+        "title": "Choisir la Ville",
+        "value": 0,
+        "items": [
+            "Paris",
+            "Lille",
+            "Londres",
+            "Besancon",
+            "Berlin"
+        ]
+    },
+    "weatherDebug": {
+        "type": "checkbox",
+        "title": "Mode Debug Météo (Force)",
+        "value": false
+    },
+    "weatherSelector": {
+        "type": "dropdown",
+        "title": "Type de Météo (Si Debug Activé)",
+        "value": 0,
+        "items": [
+            "Ciel Clair",
+            "Pluie",
+            "Neige"
+        ]
+    }
+}
