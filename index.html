@@ -4,278 +4,414 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
     <title>Living Skylines</title>
+    
     <script src="https://cdnjs.cloudflare.com/ajax/libs/suncalc/1.9.0/suncalc.min.js"></script>
+    
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&display=swap');
 
         :root {
+            /* Variables Atmosphère (Modifiées par JS) */
             --overlay-color: rgba(0, 0, 0, 0);
             --base-filter: brightness(1);
             --light-opacity: 0;
-            --sky-top: #204070; --sky-mid: #4a7db3; --sky-bottom: #a8c6e3;
-            --haze-opacity: 0.6; --haze-color: rgba(255, 255, 255, 0.3);
-            --cloud-color: #ffffff; --cloud-opacity: 0.8; --cloud-filter: blur(25px);
+            --sky-top: #204070; 
+            --sky-mid: #4a7db3; 
+            --sky-bottom: #a8c6e3;
+            --haze-opacity: 0.6; 
+            --haze-color: rgba(255, 255, 255, 0.3);
+            --cloud-color: #ffffff; 
+            --cloud-opacity: 0.8; 
+            --cloud-filter: blur(25px);
             --snow-opacity: 0;
-            --tx: 100vw; --ty: 0px; --wind-duration: 60s; 
+            --tx: 100vw; 
+            --ty: 0px; 
+            --wind-duration: 60s; 
         }
 
-        body, html { margin: 0; padding: 0; width: 100%; height: 100%; overflow: hidden; font-family: 'Inter', sans-serif; background-color: #000;}
-        #scene { position: relative; width: 100vw; height: 100vh; overflow: hidden; }
+        body, html { 
+            margin: 0; padding: 0; 
+            width: 100%; height: 100%; 
+            overflow: hidden; 
+            font-family: 'Inter', sans-serif; 
+            background-color: #000; 
+            user-select: none;
+        }
 
-        /* --- CIEL --- */
+        #scene { 
+            position: relative; 
+            width: 100vw; height: 100vh; 
+            overflow: hidden; 
+        }
+
+        /* --- 1. COUCHES VISUELLES (Moteur Météo) --- */
+        
         #background-sky {
             position: absolute; top: 0; left: 0; width: 100%; height: 100%; z-index: 0;
             background-image: linear-gradient(to bottom, var(--sky-top) 0%, var(--sky-mid) 75%, var(--sky-bottom) 100%);
             filter: contrast(1.05) brightness(1.02);
+            transition: background 2s ease;
         }
+
         #sky-haze-layer {
             position: absolute; top: 0; left: 0; width: 100%; height: 100%; z-index: 0; 
             background-image: radial-gradient(ellipse 150% 80% at 50% 100%, var(--haze-color) 0%, transparent 70%);
             opacity: var(--haze-opacity); mix-blend-mode: screen; pointer-events: none;
-            transition: opacity 5s linear, background-color 5s linear;
-        }
-
-        /* --- CALQUES VILLE (IMAGES DYNAMIQUES) --- */
-        /* Note: Les background-image sont gérés par le JS maintenant */
-        .shared-layer {
-            position: absolute; top: 0; left: 0; width: 100%; height: 100%;
-            background-size: auto 120%; background-repeat: no-repeat; background-position: center;
-            pointer-events: none; transition: opacity 5s linear; 
-        }
-
-        #base-layer {
-            position: absolute; top: 0; left: 0; width: 100%; height: 100%; z-index: 1;
-            /* PAS D'IMAGE ICI */
-            background-size: auto 120%; background-repeat: no-repeat; background-position: center;
-            filter: var(--base-filter); transition: filter 5s linear;
-        }
-        #foreground-layer {
-            position: absolute; top: 0; left: 0; width: 100%; height: 100%; z-index: 3;
-             /* PAS D'IMAGE ICI */
-            background-size: auto 120%; background-repeat: no-repeat; background-position: center;
-            filter: var(--base-filter); transition: filter 5s linear; pointer-events: none;
-        }
-
-        .snow { 
-            /* PAS D'IMAGE ICI */
-            opacity: var(--snow-opacity, 0); filter: var(--base-filter);
-            transition: filter 5s linear, opacity 5s linear;
-        }
-        .light { 
-            /* PAS D'IMAGE ICI */
-            opacity: var(--light-opacity, 0); mix-blend-mode: normal; 
-            filter: brightness(1) drop-shadow(0 0 5px rgba(250,200,80,0.5));
             transition: opacity 5s linear;
         }
 
-        /* Z-INDEX */
+        /* Classes partagées pour les images */
+        .shared-layer {
+            position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+            background-size: cover; background-repeat: no-repeat; background-position: center;
+            pointer-events: none; transition: opacity 0.5s ease;
+        }
+
+        #base-layer { z-index: 1; filter: var(--base-filter); transition: filter 5s linear; }
+        #foreground-layer { z-index: 3; filter: var(--base-filter); transition: filter 5s linear; }
+
+        /* Effets Neige / Lumière */
+        .snow { opacity: var(--snow-opacity, 0); filter: var(--base-filter); transition: opacity 2s ease; }
+        .light { opacity: var(--light-opacity, 0); mix-blend-mode: normal; filter: brightness(1) drop-shadow(0 0 5px rgba(250,200,80,0.5)); transition: opacity 2s ease; }
+
         #snow-layer-back, #light-layer-back { z-index: 1; }
         #snow-layer-front, #light-layer-front { z-index: 4; }
 
-        /* MASQUES DYNAMIQUES */
+        /* Masques CSS pour que la neige tombe "derrière" le premier plan */
         .front-mask {
-            /* Les URLs des masques sont gérées par le JS */
-            -webkit-mask-size: auto 120%; mask-size: auto 120%;
+            -webkit-mask-size: cover; mask-size: cover;
             -webkit-mask-repeat: no-repeat; mask-repeat: no-repeat;
             -webkit-mask-position: center; mask-position: center;
         }
 
-        /* --- ATMOSPHÈRE & FX --- */
+        /* Nuages animés */
         #cloud-layer { position: absolute; top: 0; left: 0; width: 100%; height: 100%; z-index: 2; pointer-events: none; overflow: hidden; }
         .cloud {
-            position: absolute; background: var(--cloud-color); border-radius: 100px;
-            opacity: var(--cloud-opacity, 0.8); filter: var(--cloud-filter, blur(25px));
+            position: absolute; background-color: var(--cloud-color);
+            -webkit-mask-image: url('cloud.webp'); mask-image: url('cloud.webp');
+            -webkit-mask-size: 100% 100%; mask-size: 100% 100%;
+            opacity: var(--cloud-opacity, 1);
+            filter: var(--cloud-filter);
             animation: moveCloud var(--wind-duration) linear infinite;
-            transition: background-color 5s, opacity 2s; content-visibility: auto;
+            transition: background-color 5s, opacity 2s;
         }
-        .cloud::after, .cloud::before { content: ''; position: absolute; background: inherit; border-radius: 50%; }
-        .cloud::before { width: 50%; height: 150%; top: -60%; left: 15%; }
-        .cloud::after { width: 40%; height: 120%; top: -50%; right: 15%; }
-        @keyframes moveCloud { from { transform: translate(calc(var(--tx) * -1), calc(var(--ty) * -1)); } to { transform: translate(var(--tx), var(--ty)); } }
-
-        #weather-canvas { position: absolute; top: 0; left: 0; width: 100%; height: 100%; z-index: 5; pointer-events: none; }
-        #overlay-layer {
-            position: absolute; top: 0; left: 0; width: 100%; height: 100%; z-index: 6;
-            background-color: var(--overlay-color); pointer-events: none; mix-blend-mode: multiply; 
-            transition: background-color 5s linear;
+        .cloud.dying {
+            opacity: 0 !important;
         }
 
-        /* --- UI --- */
+        @keyframes moveCloud { 
+            from { transform: translate(calc(var(--tx) * -1), calc(var(--ty) * -1)); } 
+            to { transform: translate(var(--tx), var(--ty)); } 
+        }
+
+                /* Calque invisible par défaut qui prend tout l'écran */
+        #lightning-overlay {
+            position: fixed;
+            top: 0; left: 0; width: 100%; height: 100%;
+            background-color: #fff;
+            opacity: 0;
+            pointer-events: none;
+            z-index: 20; /* Devant les nuages et la pluie, derrière l'UI */
+            mix-blend-mode: overlay; /* Pour un effet lumineux intense */
+            transition: opacity 0.1s ease-out;
+        }
+
+        /* Classe activée par le JS lors d'un flash */
+        #lightning-overlay.flash {
+            opacity: 0.8;
+            transition: none; /* Apparition instantanée */
+        }
+
+        /* Canvas pour la pluie (Particules JS) */
+        #weather-canvas { position: absolute; top: 0; left: 0; z-index: 5; pointer-events: none; }
+
+
+        /* --- 2. INTERFACE UTILISATEUR (Style Android) --- */
+
+        /* Widget Principal (Température) */
         .ui-container {
             position: absolute; top: 10%; left: 50%; transform: translateX(-50%); z-index: 50;
             text-align: center; color: #333; background: rgba(255, 255, 255, 0.2); backdrop-filter: blur(15px);
             padding: 1rem 1rem; border-radius: 1.5rem; box-shadow: 0 10px 30px rgba(0,0,0,0.1);
-            transition: color 1s, background 1s; user-select: none; cursor: pointer;
-        
-            max-width: 300px;
-            width: 50%;
+            transition: transform 0.2s, background 0.5s, color 0.5s; cursor: pointer;
+            min-width: 180px;
         }
-        body.dark-ui .ui-container { color: white; background: rgba(255, 255, 255, 0.2); }
-        h1 { margin: 0; font-size: 1rem; letter-spacing: 2px; text-transform: uppercase; opacity: 0.8; }
+        body.dark-ui .ui-container { color: white; background: rgba(255, 255, 255, 0.15); }
+        .ui-container:hover { transform: translateX(-50%) scale(1.05); background: rgba(255, 255, 255, 0.3); }
+
         .big-temp { font-size: 4rem; font-weight: 800; margin: 0; line-height: 1; }
-        .status { font-size: 0.9rem; font-weight: 600; margin-top: 5px; opacity: 0.9; }
-        /*.nav-container { display: flex; align-items: center; justify-content: center; gap: 15px; }
-        .nav-arrow { font-size: 1.5rem; cursor: pointer; opacity: 0.6; transition: opacity 0.3s; padding: 0 10px;}
-        .nav-arrow:hover { opacity: 1; transform: scale(1.2); }*/
+        .status { font-size: 0.9rem; font-weight: 600; margin-top: 5px; opacity: 0.9; text-transform: uppercase; }
 
-        .search-container {
-            position: relative; /* Important pour que la liste se positionne par rapport à ça */
-            margin-bottom: 10px;
-            width: 100%;
-            display: flex;
-            justify-content: center; /* Centre l'input */
-            flex-direction: column;
-        }
 
-        #city-input {
-            background: transparent;
-            border: none;
-            color: #333; /* Ou white si dark-ui, géré plus bas */
-            font-family: 'Inter', sans-serif;
-            font-size: 2rem; /* Taille titre H1 */
-            font-weight: 800;
-            text-align: center;
-            width: 100%;
-            text-transform: uppercase;
-            letter-spacing: 2px;
-            outline: none; /* Pas de cadre bleu au clic */
-            cursor: text;
-            transition: color 1s;
-        }
-        /* Adaptation Dark Mode pour l'input */
-        body.dark-ui #city-input { color: white;}
-        #city-input::placeholder {
-            color: rgba(100, 100, 100, 0.5);
-            font-weight: 400;
-            font-size: 1.2rem;
-        }
-        body.dark-ui #city-input::placeholder {color: rgba(255, 255, 255, 0.5);}
-        .dropdown-list {
-            position: absolute;
-            top: 100%; /* Juste en dessous de l'input */
-            left: 50%;
-            transform: translateX(-50%); /* Parfaitement centré */
-            width: 250px; /* Largeur fixe pour faire propre */
-            
-            background: rgba(255, 255, 255, 0.9); /* Fond semi-transparent */
-            backdrop-filter: blur(15px);
-            border-radius: 15px;
-            box-shadow: 0 10px 30px rgba(0,0,0,0.2);
-            
-            max-height: 200px; /* Si trop de villes, on scrolle */
-            overflow-y: auto;
-            
-            display: none; /* Caché par défaut */
-            z-index: 100;
-            margin-top: 10px;
-            padding: 5px 0;
-        }
+        /* --- 3. PANNEAU OVERLAY (Menu Principal) --- */
         
-        /* Style Dark Mode pour la liste */
-        body.dark-ui .dropdown-list {
-            background: rgba(30, 30, 40, 0.9);
-            color: white;
+        .panel-overlay {
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(18, 18, 18, 0.95); /* Fond sombre style Android */
+            backdrop-filter: blur(20px);
+            z-index: 200;
+            opacity: 0; pointer-events: none; transform: scale(0.95);
+            transition: opacity 0.3s ease, transform 0.3s ease;
+            display: flex; justify-content: center; align-items: flex-start;
+            overflow-y: auto; padding-top: 40px;
         }
+        .panel-overlay.visible { opacity: 1; pointer-events: auto; transform: scale(1); }
 
-        /* Style des éléments de la liste */
-        .dropdown-item {
-            padding: 10px 20px;
-            font-size: 0.9rem;
-            font-weight: 600;
-            text-transform: uppercase;
-            cursor: pointer;
-            transition: background 0.2s;
-            text-align: left;
-        }
+        .panel-content { width: 90%; max-width: 800px; display: flex; flex-direction: column; gap: 20px; padding-bottom: 50px; }
         
-        .dropdown-item:hover {
-            background: rgba(0, 0, 0, 0.1);
+        .panel-header { display: flex; justify-content: space-between; align-items: center; color: white; font-weight: 800; letter-spacing: 1px; }
+        
+        .btn-close { background: none; border: none; color: white; font-size: 1.5rem; cursor: pointer; padding: 10px; }
+        .btn-close:hover { color: #aaa; }
+
+        /* Barre de filtres (Boutons souris) */
+        .panel-controls { display: flex; gap: 10px; align-items: center; }
+
+        .filter-scroll {
+            flex: 1; display: flex; gap: 10px; overflow-x: auto; padding: 5px 0;
+            scrollbar-width: none; /* Cache scrollbar Firefox */
         }
-        body.dark-ui .dropdown-item:hover {
+        .filter-scroll::-webkit-scrollbar { display: none; } /* Cache scrollbar Chrome */
+
+        .filter-chip {
             background: rgba(255, 255, 255, 0.1);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            color: #ccc; padding: 10px 20px; border-radius: 20px;
+            font-size: 0.9rem; font-weight: 600; letter-spacing: 1px;
+            cursor: pointer; white-space: nowrap; transition: all 0.2s;
+        }
+        .filter-chip:hover { background: rgba(255, 255, 255, 0.2); color: white; }
+        .filter-chip.active {
+            background: #4CAF50; border-color: #4CAF50; color: white;
+            box-shadow: 0 4px 10px rgba(76, 175, 80, 0.4);
         }
 
-        /* Barre de scroll jolie (Webkit) */
-        .dropdown-list::-webkit-scrollbar { width: 5px; }
-        .dropdown-list::-webkit-scrollbar-thumb { background: #ccc; border-radius: 5px; }
-        .dropdown-list::-webkit-scrollbar-track { background: transparent; }
+        .btn-icon {
+            background: #333; border: none; width: 44px; height: 44px; border-radius: 12px;
+            font-size: 1.2rem; cursor: pointer; transition: background 0.2s; display: flex; align-items: center; justify-content: center;
+        }
+        .btn-icon:hover { background: #555; }
+
+        /* Grille des villes (Drag & Scroll) */
+        .cities-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+            gap: 15px;
+            max-height: 70vh;
+            overflow-y: auto;
+            cursor: grab; /* Indique qu'on peut tirer */
+        }
+        .cities-grid.grabbing { cursor: grabbing; }
         
-        /* NOUVEAU STYLE : Message "Pas trouvé" */
-        .dropdown-message {
-            padding: 15px;
-            font-size: 0.85rem;
-            color: #666;
-            font-style: italic;
-            text-align: center;
-            cursor: default; /* Curseur normal, pas de main */
-            line-height: 1.4;
+        /* Scrollbar discrète */
+        .cities-grid::-webkit-scrollbar { width: 6px; }
+        .cities-grid::-webkit-scrollbar-thumb { background: #555; border-radius: 3px; }
+
+        /* Carte Ville */
+        .city-card {
+            position: relative; aspect-ratio: 1; border-radius: 16px; overflow: hidden;
+            box-shadow: 0 4px 10px rgba(0,0,0,0.3);
+            transition: transform 0.2s, border 0.2s;
+            border: 3px solid transparent;
         }
-        body.dark-ui .dropdown-message {
-            color: #bbb;
+        .city-card:hover { transform: translateY(-5px); }
+        .city-card.selected { border-color: #4CAF50; }
+
+        .city-card-bg {
+            width: 100%; height: 100%;
+            background-size: cover; background-position: center;
+            transition: transform 0.5s;
+        }
+        .city-card:hover .city-card-bg { transform: scale(1.1); }
+
+        .city-card-overlay {
+            position: absolute; bottom: 0; left: 0; width: 100%; height: 60%;
+            background: linear-gradient(to top, rgba(0,0,0,0.9), transparent);
+            display: flex; align-items: flex-end; padding: 15px; pointer-events: none;
+        }
+        .city-card-name {
+            color: white; font-weight: 700; font-size: 1rem; text-transform: uppercase;
+            text-shadow: 0 2px 4px rgba(0,0,0,0.8);
         }
 
-        /* --- DEBUG --- */
+        /* --- 4. DEBUG PANEL --- */
+        /* --- DEBUG PANEL STYLE ANDROID --- */
         .debug-panel {
-            position: fixed; bottom: 20px; left: 20px; z-index: 100; background: rgba(255, 255, 255, 0.8); backdrop-filter: blur(15px);
-            padding: 15px; border-radius: 10px; font-family: sans-serif; font-size: 12px; width: 220px; display: none;
+            position: fixed; top: 0; right: 0; bottom: 0; /* Panneau latéral droit */
+            width: 320px; 
+            background: #101015; /* Fond Activité Android */
+            z-index: 300; 
+            box-shadow: -5px 0 30px rgba(0,0,0,0.5);
+            display: flex; flex-direction: column;
+            transform: translateX(100%); transition: transform 0.3s ease;
+            font-family: 'Inter', sans-serif;
         }
-        .debug-panel button { cursor: pointer; padding: 5px; margin: 2px; border: 1px solid #ccc; background: #eee; border-radius: 4px; }
-        .debug-panel input { width: 100%; margin: 5px 0; }
-        .debug-panel.visible{ display: block; animation: fadeIn 0.3s ease; }
-        @keyframes fadeIn{ from {opacity:0; transform: translateY(10px)} to {opacity: 1; transform: translateY(0) ;} }
+        .debug-panel.visible { transform: translateX(0); }
+
+        .debug-header {
+            padding: 20px; background: #1a1a20; color: white; font-weight: 800; letter-spacing: 1px;
+            display: flex; justify-content: space-between; align-items: center;
+            border-bottom: 1px solid #333;
+        }
+        .btn-close-debug { background: none; border: none; color: #fff; font-size: 1.2rem; cursor: pointer; }
+
+        .debug-content {
+            flex: 1; overflow-y: auto; padding: 20px;
+            /* Scrollbar fine */
+            scrollbar-width: thin; scrollbar-color: #4CAF50 #101015;
+        }
+        .debug-content::-webkit-scrollbar { width: 6px; }
+        .debug-content::-webkit-scrollbar-thumb { background: #4CAF50; border-radius: 3px; }
+
+        .btn-reset {
+            width: 100%; padding: 15px; background: #4CAF50; color: white;
+            border: none; border-radius: 4px; font-weight: bold; font-size: 0.9rem;
+            cursor: pointer; margin-bottom: 30px; text-transform: uppercase;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.2);
+        }
+        .btn-reset:hover { background: #43A047; }
+
+        .debug-section-title {
+            color: #4CAF50; font-weight: bold; font-size: 0.9rem;
+            margin-bottom: 15px; text-transform: uppercase; letter-spacing: 0.5px;
+            border-bottom: 1px solid #333; padding-bottom: 5px; margin-top: 10px;
+        }
+
+        .slider-group { margin-bottom: 20px; }
+        
+        .slider-label {
+            color: #AAA; font-size: 0.85rem; font-weight: 600; margin-bottom: 8px;
+            transition: color 0.2s;
+        }
+        .slider-label.active { color: #4CAF50; }
+
+        /* Style Slider Android */
+        .android-slider {
+            width: 100%; -webkit-appearance: none; appearance: none; background: transparent; cursor: pointer;
+        }
+        .android-slider:focus { outline: none; }
+        
+        /* Chrome Track */
+        .android-slider::-webkit-slider-runnable-track {
+            width: 100%; height: 4px; cursor: pointer;
+            background: #444; border-radius: 2px;
+        }
+        /* Chrome Thumb */
+        .android-slider::-webkit-slider-thumb {
+            height: 16px; width: 16px; border-radius: 50%; background: #4CAF50;
+            cursor: pointer; -webkit-appearance: none; margin-top: -6px;
+            box-shadow: 0 0 5px rgba(0,0,0,0.5); transition: transform 0.1s;
+        }
+        .android-slider::-webkit-slider-thumb:hover { transform: scale(1.2); }
+
     </style>
 </head>
 <body>
+
     <div id="scene">
-        <div id="background-sky"></div><div id="sky-haze-layer"></div>
-        <div id="base-layer"></div>
+        <div id="background-sky"></div>
+        <div id="sky-haze-layer"></div>
+        <div id="base-layer" class="shared-layer"></div>
+        
         <div id="snow-layer-back" class="shared-layer snow"></div>
         <div id="light-layer-back" class="shared-layer light"></div>
+        
         <div id="cloud-layer"></div>
-        <div id="foreground-layer"></div>
+        <div id="lightning-overlay"></div>
+        
+        <div id="foreground-layer" class="shared-layer"></div>
+        
         <div id="snow-layer-front" class="shared-layer snow front-mask"></div>
         <div id="light-layer-front" class="shared-layer light front-mask"></div>
-        <canvas id="weather-canvas"></canvas><div id="overlay-layer"></div>
+        
+        <canvas id="weather-canvas"></canvas>
+    </div>
 
-        <div class="ui-container">
-            <div class="search-container">
-                <input type="text" id="city-input" placeholder="CHOISIR UNE VILLE..." autocomplete="off">
-                
-                <div id="custom-dropdown" class="dropdown-list"></div>
+    <div class="ui-container" id="main-ui-trigger" title="Cliquer pour changer de ville">
+        <div class="big-temp" id="temp">--°</div>
+        <div class="status">
+            <span id="icon">--</span> 
+            <span id="city-display-name">CHARGEMENT...</span>
+            <br>
+            <span id="condition" style="font-size: 0.8em; opacity: 0.7;">--</span>
+        </div>
+    </div>
+
+    <div id="panel-overlay" class="panel-overlay">
+        <div class="panel-content">
+            <div class="panel-header">
+                <span>CHOISIR UNE VILLE</span>
+                <button id="btn-close-panel" class="btn-close">✕</button>
+            </div>
+
+            <div class="panel-controls">
+                <div id="filter-container" class="filter-scroll">
+                    <button class="filter-chip active" data-filter="all">TOUT</button>
+                    <button class="filter-chip" data-filter="france">FRANCE</button>
+                    <button class="filter-chip" data-filter="monde">MONDE</button>
+                </div>
+                <button id="btn-open-debug" class="btn-icon" title="Ouvrir le Laboratoire">🛠️</button>
+            </div>
+
+            <div id="cities-grid" class="cities-grid">
+                </div>
+        </div>
+    </div>
+
+    <div class="debug-panel" id="debug-panel">
+        <div class="debug-header">
+            <span>CENTRE DE CONTRÔLE</span>
+            <button id="btn-close-debug" class="btn-close-debug">✕</button>
+        </div>
+
+        <div class="debug-content">
+            <button id="btn-reset-live" class="btn-reset">RETOUR AU MODE LIVE</button>
+
+            <div class="debug-section-title">CONTRÔLE TEMPOREL</div>
+            
+            <div class="slider-group">
+                <div class="slider-label" id="lbl-time">Temps Réel</div>
+                <input type="range" id="seekTime" min="0" max="1440" value="720" class="android-slider">
+            </div>
+
+            <div class="debug-section-title">CONTRÔLE MÉTÉO</div>
+
+            <div class="slider-group">
+                <div class="slider-label" id="lbl-clouds">Ciel : Aucun</div>
+                <input type="range" id="seekClouds" min="0" max="4" value="0" class="android-slider weather-slider" data-cat="clouds">
+            </div>
+
+            <div class="slider-group">
+                <div class="slider-label" id="lbl-fog">Brouillard : Aucun</div>
+                <input type="range" id="seekFog" min="0" max="2" value="0" class="android-slider weather-slider" data-cat="fog">
+            </div>
+
+            <div class="slider-group">
+                <div class="slider-label" id="lbl-drizzle">Bruine : Aucun</div>
+                <input type="range" id="seekDrizzle" min="0" max="5" value="0" class="android-slider weather-slider" data-cat="drizzle">
+            </div>
+
+            <div class="slider-group">
+                <div class="slider-label" id="lbl-rain">Pluie : Aucun</div>
+                <input type="range" id="seekRain" min="0" max="5" value="0" class="android-slider weather-slider" data-cat="rain">
+            </div>
+
+            <div class="slider-group">
+                <div class="slider-label" id="lbl-snow">Neige : Aucun</div>
+                <input type="range" id="seekSnow" min="0" max="4" value="0" class="android-slider weather-slider" data-cat="snow">
+            </div>
+
+            <div class="slider-group">
+                <div class="slider-label" id="lbl-showers">Averses : Aucun</div>
+                <input type="range" id="seekShowers" min="0" max="5" value="0" class="android-slider weather-slider" data-cat="showers">
+            </div>
+
+            <div class="slider-group">
+                <div class="slider-label" id="lbl-storm">Orages : Aucun</div>
+                <input type="range" id="seekStorm" min="0" max="3" value="0" class="android-slider weather-slider" data-cat="storm">
             </div>
             
-            <div class="big-temp" id="temp">--°</div>
-            <div class="status">
-                <span id="icon">--</span>
-                <span id="condition">--</span>
-            </div>
-        </div>
-
-    <div class="debug-panel">
-        <strong>🕒 HEURE : <span id="debug-time">Réel</span></strong><br>
-        <input type="range" id="time-slider" min="0" max="24" step="0.1">
-        <button onclick="resetTime()">Reset Heure</button>
-        
-        <hr style="margin: 10px 0; border: 0; border-top: 1px solid #ccc;">
-
-        <strong>⛈️ MÉTÉO FORCE :</strong><br>
-        <div style="display:flex; justify-content: space-between;">
-            <button onclick="forceWeather(0)">☀️</button>
-            <button onclick="forceWeather(3)">☁️</button>
-            <button onclick="forceWeather(45)" title="Brume">🌫️</button>
-            <button onclick="forceWeather(61)">🌧️</button>
-            <button onclick="forceWeather(71)">❄️</button>
-        </div>
-
-        <strong>💨 VITESSE : <span id="debug-wind-val">10</span> km/h</strong><br>
-        <input type="range" id="wind-slider" min="0" max="120" value="10" oninput="forceWindSpeed(this.value)">
-
-        <strong style="display:block; margin-top:5px;">🧭 DIRECTION : <span id="debug-wind-dir-val">Ouest</span></strong>
-        <input type="range" id="wind-dir-slider" min="0" max="360" value="270" oninput="forceWindDir(this.value)">
-        
-        <div style="margin-top:10px;">
-            <button onclick="resetWeatherDebug()" style="width:100%; font-weight:bold; color:blue; border: 1px solid blue; background: #eef;">RETOUR LIVE API</button>
-        </div>
+            <div style="height: 50px;"></div> </div>
     </div>
 
     <script src="script.js"></script>

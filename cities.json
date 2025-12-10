@@ -6,39 +6,27 @@
         "prefix": "paris"
     },
     {
-        "name": "MARSEILLE",
-        "lat": 43.2965,
-        "lon": 5.3698,
-        "prefix": "marseille"
-    },
-    {
-        "name": "LYON",
-        "lat": 45.7640,
-        "lon": 4.8357,
-        "prefix": "lyon"
-    },
-    {
-        "name": "BORDEAUX",
-        "lat": 44.8378,
-        "lon": -0.5792,
-        "prefix": "bordeaux"
-    },
-    {
         "name": "LILLE",
         "lat": 50.6292,
         "lon": 3.0573,
         "prefix": "lille"
     },
     {
-        "name": "STRASBOURG",
-        "lat": 48.5734,
-        "lon": 7.7521,
-        "prefix": "strasbourg"
+        "name": "LONDRES",
+        "lat": 51.5074,
+        "lon": -0.1278,
+        "prefix": "london"
     },
     {
-        "name": "NICE",
-        "lat": 43.7102,
-        "lon": 7.2620,
-        "prefix": "nice"
+        "name": "BESANÇON",
+        "lat": 47.2378,
+        "lon": 6.0240,
+        "prefix": "besancon"
+    },
+    {
+        "name": "BERLIN",
+        "lat": 52.5200,
+        "lon": 13.4050,
+        "prefix": "berlin"
     }
 ]
